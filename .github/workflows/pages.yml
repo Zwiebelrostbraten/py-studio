@@ -30,10 +30,15 @@ jobs:
           node --check --input-type=module < app.js
           node --check pyodide-worker.js
           node --check --input-type=module < cpp-worker.js
+          for file in vendor/browsercc/*.js vendor/browser-wasi-shim/*.js; do
+            node --check --input-type=module < "$file"
+          done
       - name: Prepare static site
         run: |
           mkdir _site
           cp index.html styles.css app.js pyodide-worker.js cpp-worker.js _site/
+          mkdir _site/vendor
+          cp -R vendor/browsercc vendor/browser-wasi-shim _site/vendor/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -1,57 +1,67 @@
-let interpreter;
+import { compile, loadToolchain } from "./vendor/browsercc/index.js";
+import { WASI, File, OpenFile, ConsoleStdout } from "./vendor/browser-wasi-shim/index.js";
+
 let initialization;
+let ready = false;
 let running = false;
-
-function send(type, payload = {}) {
-  self.postMessage({ type, ...payload });
-}
-
+const flags = ["-std=c++20", "-O0", "-fno-exceptions", "-fno-threadsafe-statics",
+  "-Wall", "-Wextra", "-fno-color-diagnostics", "-I.", "-Wl,--max-memory=268435456"];
+const phases = {
+  loading: "C++ · Clang-C++20-Toolchain wird geladen …",
+  compiling: "C++ · Clang C++20 kompiliert …",
+  linking: "C++ · LLD linkt WASI-WebAssembly …",
+  running: "C++ · WASI-WebAssembly läuft …",
+};
+function send(type, payload = {}) { self.postMessage({ type, ...payload }); }
+function status(phase) { send("status", { message: phases[phase], phase }); }
 function initialize() {
-  if (initialization) return initialization;
-  initialization = (async () => {
-    try {
-      send("status", { message: "C++ · JSCPP wird geladen …" });
-      const module = await import("https://esm.sh/JSCPP@2.0.9?bundle");
-      interpreter = module.default;
-      if (typeof interpreter?.run !== "function") throw new Error("JSCPP API nicht verfügbar.");
-      send("ready", { version: "JSCPP 2.0.9" });
-    } catch (error) {
-      send("fatal", { message: error?.stack || String(error) });
-    }
-  })();
+  if (!initialization) initialization = (async () => {
+    status("loading");
+    await loadToolchain();
+    ready = true;
+    send("ready", { version: "Clang C++20 · WASI" });
+  })().catch(error => send("fatal", { message: error?.stack || String(error) }));
   return initialization;
 }
 
-self.addEventListener("message", ({ data }) => {
-  if (data?.type === "init") {
-    // Initialization reports its own errors; also contain unexpected failures.
-    initialize().catch(error => send("fatal", { message: String(error) }));
-    return;
-  }
+self.addEventListener("message", async ({ data }) => {
+  if (data?.type === "init") { await initialize(); return; }
   if (data?.type !== "run" || running) return;
-  if (!interpreter) {
-    send("run-error", { message: "JSCPP ist noch nicht bereit." });
-    return;
-  }
+  if (!ready) { send("run-error", { message: "Clang C++20 ist noch nicht bereit." }); return; }
   running = true;
-  send("running");
-  let buffer = "";
-  function flush() {
-    if (buffer) { send("stdout", { text: buffer }); buffer = ""; }
-  }
-  try {
-    const exitCode = interpreter.run(data.code ?? "", "", {
-      stdio: { write(text) {
-        buffer += String(text);
-        if (buffer.length >= 4096 || buffer.includes("\n")) flush();
-      } },
+  const decoders = [];
+  const stream = type => {
+    const decoder = new TextDecoder();
+    decoders.push({ type, decoder });
+    return new ConsoleStdout(bytes => {
+      const text = decoder.decode(bytes, { stream: true });
+      if (text) send(type, { text });
     });
-    flush();
+  };
+  try {
+    const fileName = data.filename || "main.cpp";
+    const extraFiles = Object.create(null);
+    for (const [name, content] of Object.entries(data.extraFiles || {})) {
+      if (name !== fileName && !/[/\\\x00-\x1f]/.test(name) && /\.(cpp|cc|cxx|h|hpp)$/i.test(name)
+          && typeof content === "string") extraFiles[name] = content;
+    }
+    const result = await compile({ source: data.code ?? "", fileName, flags, extraFiles, onStatus: status });
+    if (result.compileOutput) send("stderr", { text: result.compileOutput });
+    if (!result.module) {
+      send("run-error", { message: "Kompilieren/Linken fehlgeschlagen (Exit " + result.exitCode + ").", exitCode: result.exitCode });
+      return;
+    }
+    const wasi = new WASI([fileName], [], [new OpenFile(new File(new Uint8Array())), stream("stdout"), stream("stderr")]);
+    const instance = await WebAssembly.instantiate(result.module, { wasi_snapshot_preview1: wasi.wasiImport });
+    status("running");
+    send("running");
+    const exitCode = wasi.start(instance);
+    for (const { type, decoder } of decoders) {
+      const text = decoder.decode();
+      if (text) send(type, { text });
+    }
     send("finished", { exitCode });
   } catch (error) {
-    flush();
     send("run-error", { message: error?.stack || String(error) });
-  } finally {
-    running = false;
-  }
+  } finally { running = false; }
 });

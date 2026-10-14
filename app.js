@@ -333,14 +333,14 @@ function createWorker(language) {
         rt.message = languageName[language] + " " + data.version + " bereit";
         rt.state = "ready";
       } else if (data.type === "status") {
-        rt.message = data.message; rt.state = "loading";
+        rt.message = data.message; rt.state = rt.running ? "running" : "loading";
       } else if (data.type === "stdout" || data.type === "stderr") {
         appendOutput(data.text || "", data.type === "stderr" ? "error" : "");
       } else if (data.type === "running") {
         rt.running = true;
       } else if (data.type === "finished" || data.type === "run-error") {
         rt.running = false;
-        rt.message = data.type === "finished" ? languageName[language] + " bereit" : "Fehler in " + rt.filename;
+        rt.message = data.type === "finished" ? (language === "cpp" ? "Clang C++20 · WASI bereit" : languageName[language] + " bereit") : "Fehler in " + rt.filename;
         rt.state = data.type === "finished" ? "ready" : "error";
         if (data.type === "run-error") appendOutput(rt.filename + ": " + data.message + "\n", "error");
         else if (language === "cpp") appendOutput("[Exit " + data.exitCode + "]\n", "system");
@@ -357,8 +357,8 @@ function createWorker(language) {
       if (rt.worker === worker) runtimeFailure(language, "Worker-Nachricht konnte nicht gelesen werden.");
     });
     rt.timer = setTimeout(() => {
-      if (rt.worker === worker) runtimeFailure(language, "Zeitüberschreitung beim Laden (90 Sekunden).");
-    }, 90000);
+      if (rt.worker === worker) runtimeFailure(language, "Zeitüberschreitung beim Laden.");
+    }, language === "cpp" ? 300000 : 90000);
     worker.postMessage({ type: "init" });
   } catch (error) { runtimeFailure(language, error.message); }
   refreshRuntimeStatus();
@@ -370,12 +370,18 @@ function runCode() {
   if (rt.failed) { createWorker(language); return; }
   if (!rt.ready || rt.running) return;
   rt.filename = workspace.activeFilename;
-  appendOutput("$ " + (language === "cpp" ? "jscpp " : "python ") + rt.filename + "\n", "command");
+  appendOutput("$ " + (language === "cpp" ? "clang++ -std=c++20 " : "python ") + rt.filename + "\n", "command");
   rt.running = true;
-  rt.message = languageName[language] + " · " + rt.filename + " läuft …";
+  rt.message = languageName[language] + " · " + rt.filename + (language === "cpp" ? " wird kompiliert …" : " läuft …");
   rt.state = "running";
   refreshRuntimeStatus();
-  try { rt.worker.postMessage({ type: "run", code: currentCode() }); }
+  try {
+    const extraFiles = Object.fromEntries(Object.entries(workspace.files)
+      .filter(([name, file]) => name !== rt.filename && file.language === "cpp")
+      .map(([name, file]) => [name, file.content]));
+    rt.worker.postMessage({ type: "run", code: currentCode(), filename: rt.filename,
+      ...(language === "cpp" ? { extraFiles } : {}) });
+  }
   catch (error) { runtimeFailure(language, error.message); }
 }
 

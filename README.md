@@ -1,6 +1,6 @@
 # py-studio
 
-Ein minimalistischer Python- und C++-Editor im VS-Code-Stil. CodeMirror liefert Syntax-Highlighting. Python läuft mit CPython/Pyodide in einem Web Worker, C++ mit JSCPP in einem separaten Worker. Alles läuft im Browser, ohne Backend oder Datei-Upload.
+Ein minimalistischer Python- und C++-Editor im VS-Code-Stil. CodeMirror liefert Syntax-Highlighting. Python läuft mit CPython/Pyodide in einem Web Worker, C++ mit echtem Clang C++20 und LLD als WASI-WebAssembly in einem separaten Modul-Worker. Alles läuft im Browser, ohne Backend oder Datei-Upload.
 
 ## Lokal starten
 
@@ -10,7 +10,7 @@ Die Seite muss über HTTP geöffnet werden, damit ES-Module und Worker funktioni
 python3 -m http.server 8000
 ```
 
-Danach `http://localhost:8000` öffnen. CodeMirror und JSCPP werden von esm.sh geladen, Pyodide 0.26.4 von jsDelivr. Zum Laden der Bibliotheken ist eine Internetverbindung nötig.
+Danach `http://localhost:8000` öffnen. CodeMirror wird von esm.sh geladen, Pyodide 0.26.4 von jsDelivr. Zum Laden der Bibliotheken ist eine Internetverbindung nötig.
 
 ## Workspace und Cache
 
@@ -20,7 +20,7 @@ Der Cache gilt für diesen Browser und diese Website-Adresse. Er ist kein Cloud-
 
 Explorer und Tabs zeigen alle Dateien. Anklicken wechselt die aktive Datei. **＋** fragt nach einem neuen Dateinamen und legt eine leere Datei an, ohne bestehende Dateien zu überschreiben. Auf Mobilgeräten steht **＋** neben den horizontal scrollbar angeordneten Tabs. Unterstützt werden `.py` für Python und `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp` für C++. **×** löscht eine Datei erst nach Bestätigung. Die letzte Datei kann nicht gelöscht werden.
 
-Die Dateien sind gespeicherte, unabhängig ausführbare Editor-Dokumente: Run führt die aktive Datei aus. Der Workspace wird nicht als virtuelles Dateisystem in die Interpreter eingebunden; Python-Imports anderer Workspace-Dateien, eigene C++-Header und das Linken mehrerer C++-Dateien sind nicht implementiert.
+Run kompiliert bzw. führt die aktive Datei aus. Andere gespeicherte C++-Dateien werden als `extraFiles` in das Compiler-Dateisystem eingebunden; eigene Header können mit `#include "name.hpp"` verwendet werden. Separates Kompilieren und Linken mehrerer Translation Units ist noch nicht implementiert. Python-Imports anderer Workspace-Dateien bleiben unverändert nicht implementiert.
 
 ## Ausführen und Grenzen
 
@@ -28,21 +28,22 @@ Die Dateien sind gespeicherte, unabhängig ausführbare Editor-Dokumente: Run f�
 
 ### C++
 
-`cpp-worker.js` lädt **JSCPP 2.0.9** als ES-Modul von `https://esm.sh/JSCPP@2.0.9?bundle`. Die dokumentierte API `JSCPP.run(code, input, config)` interpretiert den Code synchron im Worker; `config.stdio.write` erfasst stdout. Der Hauptthread bleibt bedienbar. Rückgabewert und Interpreterfehler erscheinen im Terminal.
+`cpp-worker.js` importiert `compile` aus `vendor/browsercc/index.js` und die WASI-Laufzeit aus `vendor/browser-wasi-shim/index.js`. Echter Clang kompiliert C++20, LLD linkt gegen die vendorte WASI-Sysroot mit libc++, anschließend führt WebAssembly mit `@bjorn3/browser_wasi_shim` das Programm aus. Dies ist ein echter Compiler, kein Interpreter für eine Grammatik-Teilmenge. stdout, stderr, Compiler-/Linkerdiagnosen und Exit-Code erscheinen im Terminal; Statusmeldungen zeigen Laden, Kompilieren, Linken und Ausführen.
 
-JSCPP ist ein **Interpreter für eine Teilmenge von C++**, kein natives clang und kein vollständiger moderner C++-Compiler. Nicht alle Sprachmerkmale und Standardbibliotheken werden unterstützt. Die Oberfläche zeigt diesen Hinweis für C++ an. Ein unterstütztes Beispiel:
+Die Flags sind `-std=c++20 -O0 -fno-exceptions -fno-threadsafe-statics -Wall -Wextra -fno-color-diagnostics -I. -Wl,--max-memory=268435456`. Der WASI-/Browser-Build begrenzt Exceptions (hier deaktiviert), Threads, Sockets und native OS-APIs. Standard-C++20-Sprachmerkmale und die mitgelieferte Standardbibliothek werden vom echten Compiler verarbeitet; Verfügbarkeit einzelner Bibliotheksfunktionen hängt vom WASI-Build ab. Programmspeicher ist auf 256 MiB begrenzt; Compiler und Linker benötigen zusätzlich Browserspeicher. stdin erhält EOF; interaktive Eingaben werden nicht unterstützt. Jede Ausführung erstellt eine neue WASI-Instanz.
+
+Beim ersten Laden ist mit ungefähr **100 MB Downloads** von den **same-origin GitHub-Pages-Assets** zu rechnen (die aktuell vendorten Clang-/LLD-Wasm-Dateien und Sysroot sind zusammen etwa 92 MiB; Transfer und Caching hängen vom Browser ab). Kein Compiler-Backend und kein Quellcode-Upload. Heruntergeladene Toolchain-Dateien werden innerhalb des Workers wiederverwendet; nach Stop wird der Worker neu erzeugt und der HTTP-Cache kann Downloads vermeiden. C++ hat wegen der großen Assets ein Ladezeitlimit von fünf Minuten.
 
 ```cpp
 #include <iostream>
-using namespace std;
+#include <vector>
 
 int main() {
-    cout << "Hallo, C++!" << endl;
+    std::vector<int> values{1, 2, 3};
+    for (int value : values) std::cout << value << '\n';
     return 0;
 }
 ```
-
-Siehe [JSCPP-Dokumentation](https://github.com/felixhao28/JSCPP) für API und Grenzen. stdin ist leer; interaktive Eingaben werden nicht unterstützt.
 
 ### Python
 
@@ -62,7 +63,7 @@ Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funkti
 
 ## Ausfallsicherheit
 
-Bei einem CodeMirror-CDN-Fehler oder nach 15 Sekunden Ladezeit bleibt ein einfacher Texteditor verfügbar. Bei Runtime-Ladefehlern oder nach 90 Sekunden Ladezeit kann **Run** die betroffene Runtime erneut laden. Python und C++ laden unabhängig voneinander; ein Fehler einer Sprache verhindert die andere nicht. Ohne Zugriff auf das jeweilige CDN ist keine Ausführung möglich. Ältere Terminalausgabe wird auf 1.000 Fragmente bzw. 200.000 Zeichen begrenzt.
+Bei einem CodeMirror-CDN-Fehler oder nach 15 Sekunden Ladezeit bleibt ein einfacher Texteditor verfügbar. Bei Runtime-Ladefehlern oder nach 90 Sekunden Python- bzw. fünf Minuten C++-Ladezeit kann **Run** die betroffene Runtime erneut laden. Python und C++ laden unabhängig voneinander; ein Fehler einer Sprache verhindert die andere nicht. Python benötigt Zugriff auf sein CDN; C++ benötigt die lokalen Toolchain-Assets. Ältere Terminalausgabe wird auf 1.000 Fragmente bzw. 200.000 Zeichen begrenzt.
 
 ## GitHub Pages
 
@@ -70,7 +71,7 @@ Bei einem CodeMirror-CDN-Fehler oder nach 15 Sekunden Ladezeit bleibt ein einfac
 2. Unter **Settings → Pages** als Quelle **GitHub Actions** auswählen.
 3. Auf `main` pushen oder den Workflow manuell starten.
 
-`.github/workflows/pages.yml` prüft JavaScript und veröffentlicht `index.html`, `styles.css`, `app.js`, `pyodide-worker.js` und `cpp-worker.js` als statische Seite.
+`.github/workflows/pages.yml` prüft JavaScript und veröffentlicht `index.html`, `styles.css`, `app.js`, `pyodide-worker.js` und `cpp-worker.js` sowie die vollständigen Verzeichnisse `vendor/browsercc` und `vendor/browser-wasi-shim` als statische Seite, einschließlich `clang.wasm`, `lld.wasm`, `sysroot.tar` und aller benötigten JS-Module.
 
 Lokale Prüfungen:
 
