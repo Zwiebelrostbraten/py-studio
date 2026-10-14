@@ -46,6 +46,18 @@ Siehe [JSCPP-Dokumentation](https://github.com/felixhao28/JSCPP) für API und Gr
 
 ### Python
 
+Das mit Pyodide mitgelieferte `micropip` wird vor der Bereitschaftsmeldung geladen. Python-Dateien können damit Pakete installieren, zum Beispiel NumPy:
+
+```python
+import micropip
+await micropip.install("numpy")
+
+import numpy as np
+print(np.array([1, 2, 3]) * 2)
+```
+
+Die Ausgabe ist `[2 4 6]`. Pakete müssen Pyodide-kompatibel sein und werden zur Laufzeit vom CDN geladen; dafür ist eine Internetverbindung nötig. Ein Fehler beim Vorladen von `micropip` wird als Runtime-Ladefehler angezeigt.
+
 Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funktionieren, native Pakete nur mit einem passenden Pyodide-Paket. Server-Frameworks, dauerhafte Hintergrundprozesse und serverseitige Dateisysteme stehen nicht zur Verfügung. `input()` erhält EOF. Wie bisher bleibt der Python-Interpreter zwischen Ausführungen erhalten.
 
 ## Ausfallsicherheit

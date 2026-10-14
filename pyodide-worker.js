@@ -17,6 +17,8 @@ async function initialize() {
     try {
       importScripts(`${PYODIDE_BASE}pyodide.js`);
       pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
+      send("status", { message: "Python-Paket micropip wird geladen …" });
+      await pyodide.loadPackage("micropip");
       function stream(type) {
         const decoder = new TextDecoder();
         return { write(buffer) {
