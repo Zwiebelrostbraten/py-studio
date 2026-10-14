@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0d1117" />
     <meta
       name="description"
-      content="Ein minimalistischer Python-Editor mit CPython im Browser."
+      content="Ein minimalistischer Python- und C++-Editor im Browser."
     />
     <title>py-studio · main.py</title>
     <link rel="stylesheet" href="styles.css" />
@@ -43,13 +43,10 @@
         <aside class="explorer-panel" aria-label="Explorer">
           <div class="panel-heading">
             <span>EXPLORER</span>
-            <button class="icon-button" id="new-file-button" type="button" aria-label="main.py leeren">＋</button>
+            <button class="icon-button" id="new-file-button" type="button" aria-label="Neue Datei">＋</button>
           </div>
           <div class="workspace-label">PY-STUDIO</div>
-          <button class="file-row is-selected" id="file-row" type="button" aria-label="main.py öffnen">
-            <span class="python-badge" aria-hidden="true">Py</span>
-            <span>main.py</span>
-          </button>
+          <div id="file-list"></div>
           <div class="explorer-hint">
             <span class="hint-dot" aria-hidden="true"></span>
             <span>Alles läuft lokal in deinem Browser.</span>
@@ -57,11 +54,9 @@
         </aside>
 
         <main class="editor-area">
-          <div class="editor-tabs" aria-label="Geöffnete Datei">
-            <div class="editor-tab is-active">
-              <span class="python-badge" aria-hidden="true">Py</span>
-              <span>main.py</span>
-            </div>
+          <div class="tabs-bar">
+            <div class="editor-tabs" id="file-tabs" aria-label="Workspace-Dateien"></div>
+            <button class="icon-button" id="mobile-new-file" type="button" aria-label="Neue Datei">＋</button>
           </div>
 
           <div class="editor-toolbar">
@@ -71,7 +66,7 @@
             </div>
           </div>
 
-          <section class="code-surface" aria-label="Python-Editor">
+          <section class="code-surface" aria-label="Code-Editor">
             <div id="editor" aria-label="Python-Code"></div>
             <noscript><p class="noscript-message">JavaScript muss aktiviert sein, damit der Editor funktioniert.</p></noscript>
           </section>
@@ -85,6 +80,7 @@
                 <button class="stop-button" id="stop-button" type="button" disabled>Stop</button>
               </div>
             </div>
+            <p id="cpp-note" class="cpp-note" hidden>JSCPP 2.0.9 interpretiert eine Teilmenge von C++; kein natives clang.</p>
             <pre class="terminal-output" id="terminal-output" tabindex="0" aria-live="polite"><span class="terminal-placeholder">Starte dein Programm mit <strong>Run</strong> oder Ctrl/⌘↵</span></pre>
           </section>
         </main>
@@ -92,7 +88,7 @@
 
       <footer class="statusbar">
         <div class="status-left"><span class="status-item" id="status-indicator"><span class="status-light" aria-hidden="true"></span><span id="status-text" role="status">Initialisiere Python …</span></span></div>
-        <div class="status-right"><span class="status-item">UTF-8</span><span class="status-item">Spaces: 4</span><span class="status-item">Python</span></div>
+        <div class="status-right"><span class="status-item">UTF-8</span><span class="status-item">Spaces: 4</span><span class="status-item" id="language-label">Python</span></div>
       </footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -134,3 +134,28 @@ kbd { padding: 1px 4px; border: 1px solid rgba(0,0,0,.25); border-radius: 3px; f
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+
+.tabs-bar { display: flex; min-width: 0; border-bottom: 1px solid var(--border); }
+.editor-tabs { flex: 1; min-width: 0; overflow-x: auto; border-bottom: 0; }
+.editor-tab { flex-shrink: 0; border-top-color: transparent; color: var(--muted); }
+.editor-tab.is-active { border-top-color: var(--accent); color: var(--text); background: var(--bg); }
+.tab-select { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.tab-close:disabled { opacity: .25; cursor: default; }
+#mobile-new-file { flex-shrink: 0; align-self: center; display: none; }
+.cpp-note { margin: 0; padding: 5px 14px; font-size: 11px; color: var(--warning); border-bottom: 1px solid var(--muted-border); }
+.terminal-panel:has(.cpp-note:not([hidden])) { grid-template-rows: 36px auto minmax(0, 1fr); }
+.file-row { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.breadcrumbs strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.window-title { min-width: 0; }
+.window-title span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 780px) { #mobile-new-file { display: inline-grid; } }
+
+.cpp-badge { color: var(--blue); }
+.python-badge { flex-shrink: 0; }
+.explorer-panel { overflow-y: auto; }
+.file-row span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.status-left, .status-left .status-item { min-width: 0; }
+#status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-right, .status-light { flex-shrink: 0; }
+.terminal-actions { min-width: 0; }
+.runtime-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

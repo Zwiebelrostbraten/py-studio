@@ -29,10 +29,11 @@ jobs:
         run: |
           node --check --input-type=module < app.js
           node --check pyodide-worker.js
+          node --check --input-type=module < cpp-worker.js
       - name: Prepare static site
         run: |
           mkdir _site
-          cp index.html styles.css app.js pyodide-worker.js _site/
+          cp index.html styles.css app.js pyodide-worker.js cpp-worker.js _site/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
