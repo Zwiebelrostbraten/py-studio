@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta
+      name="description"
+      content="Ein minimalistischer Python-Editor mit CPython im Browser."
+    />
+    <title>py-studio · main.py</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <a class="brand" href="." aria-label="py-studio Startseite">
+          <span class="brand-mark" aria-hidden="true">›_</span>
+          <span>py-studio</span>
+        </a>
+        <div class="window-title" aria-label="Geöffnete Datei">
+          <span class="file-dot" aria-hidden="true"></span>
+          <span>main.py</span>
+        </div>
+        <div class="title-actions">
+          <button class="button button-quiet" id="download-button" type="button">
+            Download
+          </button>
+          <button class="button button-primary" id="run-button" type="button">
+            <span class="play-icon" aria-hidden="true">▶</span>
+            <span>Run</span>
+            <kbd>⌘↵</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="workbench">
+        <div class="activity-rail" aria-hidden="true">
+          <span class="rail-button is-active">▤</span>
+        </div>
+
+        <aside class="explorer-panel" aria-label="Explorer">
+          <div class="panel-heading">
+            <span>EXPLORER</span>
+            <button class="icon-button" id="new-file-button" type="button" aria-label="main.py leeren">＋</button>
+          </div>
+          <div class="workspace-label">PY-STUDIO</div>
+          <button class="file-row is-selected" id="file-row" type="button" aria-label="main.py öffnen">
+            <span class="python-badge" aria-hidden="true">Py</span>
+            <span>main.py</span>
+          </button>
+          <div class="explorer-hint">
+            <span class="hint-dot" aria-hidden="true"></span>
+            <span>Alles läuft lokal in deinem Browser.</span>
+          </div>
+        </aside>
+
+        <main class="editor-area">
+          <div class="editor-tabs" aria-label="Geöffnete Datei">
+            <div class="editor-tab is-active">
+              <span class="python-badge" aria-hidden="true">Py</span>
+              <span>main.py</span>
+            </div>
+          </div>
+
+          <div class="editor-toolbar">
+            <div class="breadcrumbs"><span>workspace</span><span class="breadcrumb-separator">›</span><strong>main.py</strong></div>
+            <div class="editor-actions">
+              <button class="text-button" id="reset-button" type="button">Zurücksetzen</button>
+            </div>
+          </div>
+
+          <section class="code-surface" aria-label="Python-Editor">
+            <div id="editor" aria-label="Python-Code"></div>
+            <noscript><p class="noscript-message">JavaScript muss aktiviert sein, damit der Editor funktioniert.</p></noscript>
+          </section>
+
+          <section class="terminal-panel" aria-label="Terminal">
+            <div class="terminal-header">
+              <div class="terminal-tabs"><span class="terminal-tab is-active">TERMINAL</span></div>
+              <div class="terminal-actions">
+                <span class="runtime-label" id="runtime-label">Python wird geladen …</span>
+                <button class="icon-button" id="clear-button" type="button" aria-label="Terminal leeren">⌫</button>
+                <button class="stop-button" id="stop-button" type="button" disabled>Stop</button>
+              </div>
+            </div>
+            <pre class="terminal-output" id="terminal-output" tabindex="0" aria-live="polite"><span class="terminal-placeholder">Starte dein Programm mit <strong>Run</strong> oder Ctrl/⌘↵</span></pre>
+          </section>
+        </main>
+      </div>
+
+      <footer class="statusbar">
+        <div class="status-left"><span class="status-item" id="status-indicator"><span class="status-light" aria-hidden="true"></span><span id="status-text" role="status">Initialisiere Python …</span></span></div>
+        <div class="status-right"><span class="status-item">UTF-8</span><span class="status-item">Spaces: 4</span><span class="status-item">Python</span></div>
+      </footer>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
