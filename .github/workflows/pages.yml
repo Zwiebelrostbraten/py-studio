@@ -28,6 +28,8 @@ jobs:
       - name: Check JavaScript
         run: |
           node --check --input-type=module < app.js
+          node --check live-stdin.js
+          node --check coi-serviceworker.js
           node --check pyodide-worker.js
           node --check --input-type=module < cpp-worker.js
           for file in vendor/browsercc/*.js vendor/browser-wasi-shim/*.js; do
@@ -36,7 +38,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir _site
-          cp index.html styles.css app.js pyodide-worker.js cpp-worker.js _site/
+          cp index.html styles.css app.js pyodide-worker.js cpp-worker.js live-stdin.js coi-serviceworker.js _site/
           mkdir _site/vendor
           cp -R vendor/browsercc vendor/browser-wasi-shim _site/vendor/
       - name: Upload artifact

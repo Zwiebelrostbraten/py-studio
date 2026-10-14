@@ -1,5 +1,16 @@
+import "./live-stdin.js";
 import { compile, loadToolchain } from "./vendor/browsercc/index.js";
-import { WASI, File, OpenFile, ConsoleStdout } from "./vendor/browser-wasi-shim/index.js";
+import { WASI, File, OpenFile, ConsoleStdout, Fd, wasi as defs } from "./vendor/browser-wasi-shim/index.js";
+
+class LiveInputFd extends Fd {
+  constructor(buffer) { super(); this.channel = new LiveStdin(buffer); }
+  fd_fdstat_get() {
+    const fdstat = new defs.Fdstat(defs.FILETYPE_CHARACTER_DEVICE, 0);
+    fdstat.fs_rights_base = BigInt(defs.RIGHTS_FD_READ);
+    return { ret: 0, fdstat };
+  }
+  fd_read(size) { return { ret: 0, data: this.channel.read(size) }; }
+}
 
 let initialization;
 let ready = false;
@@ -51,7 +62,7 @@ self.addEventListener("message", async ({ data }) => {
       send("run-error", { message: "Kompilieren/Linken fehlgeschlagen (Exit " + result.exitCode + ").", exitCode: result.exitCode });
       return;
     }
-    const wasi = new WASI([fileName], [], [new OpenFile(new File(new TextEncoder().encode(data.stdin ?? ""))), stream("stdout"), stream("stderr")]);
+    const wasi = new WASI([fileName], [], [data.liveStdin ? new LiveInputFd(data.liveStdin) : new OpenFile(new File(new TextEncoder().encode(data.stdin ?? ""))), stream("stdout"), stream("stderr")]);
     const instance = await WebAssembly.instantiate(result.module, { wasi_snapshot_preview1: wasi.wasiImport });
     status("running");
     send("running");

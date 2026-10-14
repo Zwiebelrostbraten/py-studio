@@ -146,6 +146,8 @@ kbd { padding: 1px 4px; border: 1px solid rgba(0,0,0,.25); border-radius: 3px; f
 /* The hidden C++ note leaves its row available for the input control. */
 .terminal-panel:not(:has(.cpp-note:not([hidden]))) { grid-template-rows: 36px auto minmax(60px, 1fr); }
 .stdin-control { min-width: 0; padding: 8px 14px; border-bottom: 1px solid var(--muted-border); }
+.stdin-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.stdin-control .stdin-heading label { margin: 0; }
 .stdin-control label { display: block; margin-bottom: 5px; color: var(--text); font-size: 11px; }
 #stdin-input { display: block; width: 100%; min-height: 58px; padding: 6px 8px; resize: vertical; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font: 12px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
 #stdin-input::placeholder { color: var(--muted); opacity: 1; }

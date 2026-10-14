@@ -1,3 +1,4 @@
+importScripts("./live-stdin.js");
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 let pyodide;
@@ -57,9 +58,16 @@ self.addEventListener("message", async ({ data }) => {
     // Byte input preserves Unicode, blank lines and an unterminated final line.
     const stdinBytes = new TextEncoder().encode(data.stdin ?? "");
     let stdinOffset = 0;
+    const channel = data.liveStdin ? new LiveStdin(data.liveStdin) : null;
     pyodide.setStdin({
       isatty: false,
-      stdin: () => stdinOffset < stdinBytes.length ? stdinBytes[stdinOffset++] : null,
+      read: buffer => {
+        const bytes = channel ? channel.read(buffer.length) :
+          stdinBytes.subarray(stdinOffset, stdinOffset + buffer.length);
+        buffer.set(bytes);
+        stdinOffset += bytes.length;
+        return bytes.length;
+      },
     });
     try {
       await pyodide.runPythonAsync(data.code ?? "");

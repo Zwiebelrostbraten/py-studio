@@ -26,16 +26,22 @@ Run kompiliert bzw. führt die aktive Datei aus. Andere gespeicherte C++-Dateien
 
 **Run** oder **Ctrl/⌘+Enter** führt die aktive Datei mit der passenden Sprache aus. Ausgabe und Interpreterfehler erscheinen im Terminal; Befehlszeile, Runtime-Status und Fehlermeldungen nennen Sprache bzw. Datei. **Stop** beendet laufende Worker auch bei Endlosschleifen und erzeugt sie neu. Wenn beide Sprachen gleichzeitig laufen, stoppt Stop beide. Python-Variablen und das virtuelle Dateisystem gehen beim Neustart verloren. **Clear** leert nur das Terminal. **Zurücksetzen** ersetzt nur den Inhalt der aktiven Datei durch das Beispiel ihrer Sprache. **Download** speichert die aktive Datei unter ihrem Dateinamen.
 
-### Vorbereitete Eingabe (stdin)
+### Terminal-Eingabe (stdin)
 
-Im Terminal steht das mehrzeilige Feld **stdin (Eingabe)** für beide Sprachen bereit. Alle Eingaben **vor Run** eingeben, eine Eingabe pro Zeile, zum Beispiel:
+Das mehrzeilige Feld **stdin (Eingabe)** dient beiden Sprachen als Terminal-Eingabe. Im **Live-Modus** kann Text vor Run vorbereitet und während der Ausführung ergänzt werden, auch wenn C++ gerade in `getline`/`cin` oder Python in `input()` wartet. Enter sendet einen Zeilenumbruch. **EOF** oder **Ctrl/⌘+D im Eingabefeld** schließt die Eingabe; noch gepufferte Bytes werden vorher gelesen. Eine letzte Zeile ohne Zeilenumbruch wird damit ebenfalls lesbar. Ein leeres Feld wartet im Live-Modus, bis Text oder EOF kommt. Bereits gesendeter Text lässt sich während des Runs nur ergänzen; nach Ende oder Stop ist das Feld wieder frei editierbar.
+
+Die sichtbare stdin-Notiz zeigt den tatsächlich verfügbaren Modus. Live-Eingabe benötigt `crossOriginIsolated` und `SharedArrayBuffer`. GitHub Pages kann COOP/COEP-Header nicht selbst setzen: das vendorte, gleichursprüngliche `coi-serviceworker.js` wird vor `app.js` geladen, registriert sich auf HTTPS/localhost und lädt die Seite zur Isolation neu. Service Worker müssen erlaubt sein. CDN-Ressourcen benötigen unter COEP passende CORS-Freigaben.
+
+Fehlt Isolation oder SharedArrayBuffer, bleibt automatisch der **Fallback mit vorbereiteter Eingabe** aktiv: alle Eingaben vor Run eintragen, danach folgt automatisch EOF. Änderungen während des Runs gelten dort erst beim nächsten Run. Beispiel für beide Modi:
 
 ```text
 Anna
 42
 ```
 
-Jeder Run erhält den aktuellen Feldinhalt von Anfang an. Leere Zeilen und Unicode bleiben erhalten; eine letzte Zeile benötigt keinen abschließenden Zeilenumbruch. Ein leeres Feld liefert sofort EOF. Änderungen während einer Ausführung gelten erst beim nächsten Run. Das Feld bleibt bei Clear erhalten, wird aber nicht in localStorage gespeichert und ist nach Neuladen leer. Dies ist vorbereitete Eingabe, kein Live-Terminal; interaktives Tippen während ein synchrones WASI-Programm bereits läuft wird noch nicht unterstützt.
+Jeder Run liest den Feldinhalt neu von Anfang an. Leere Zeilen und Unicode bleiben erhalten. Das Feld bleibt bei Clear erhalten, wird aber nicht in localStorage gespeichert und ist nach Neuladen leer. Bei gleichzeitig laufenden Sprachen gehen neue Eingaben und EOF an beide laufenden Live-Kanäle.
+
+`live-stdin.js` implementiert einen gemeinsamen UTF-8-Ringpuffer mit atomaren Lese-/Schreibpositionen, EOF, Abort und einem Weckzähler. Der Hauptthread schreibt neue Bytes aus den Eingabeereignissen, puffert Überlauf ohne Blockieren und weckt mit `Atomics.notify`. Der C++-Worker verwendet einen eigenen WASI-`Fd` für fd 0, der Python-Worker denselben Kanal über `setStdin`. Leere Kanäle warten im Worker mit `Atomics.wait`; Stop setzt vor dem Terminieren Abort und weckt den Kanal. Jeder Run bekommt einen neuen Kanal.
 
 C++ mit `getline` und numerischem `cin` (mit obiger Eingabe: `Hallo Anna, Zahl: 42`):
 
@@ -47,7 +53,7 @@ int main() {
     std::string eingabe;
     int zahl;
     if (!std::getline(std::cin, eingabe) || !(std::cin >> zahl)) {
-        std::cerr << "Bitte Name und Zahl vor Run eingeben.\n";
+        std::cerr << "Bitte Name und Zahl eingeben.\n";
         return 1;
     }
     std::cout << "Hallo " << eingabe << ", Zahl: " << zahl << '\n';
@@ -66,7 +72,7 @@ print(f"Hallo {name}, Zahl: {zahl}")
 
 `cpp-worker.js` importiert `compile` aus `vendor/browsercc/index.js` und die WASI-Laufzeit aus `vendor/browser-wasi-shim/index.js`. Echter Clang kompiliert C++20, LLD linkt gegen die vendorte WASI-Sysroot mit libc++, anschließend führt WebAssembly mit `@bjorn3/browser_wasi_shim` das Programm aus. Dies ist ein echter Compiler, kein Interpreter für eine Grammatik-Teilmenge. stdout, stderr, Compiler-/Linkerdiagnosen und Exit-Code erscheinen im Terminal; Statusmeldungen zeigen Laden, Kompilieren, Linken und Ausführen.
 
-Die Flags sind `-std=c++20 -O0 -fno-exceptions -fno-threadsafe-statics -Wall -Wextra -fno-color-diagnostics -I. -Wl,--max-memory=268435456`. Der WASI-/Browser-Build begrenzt Exceptions (hier deaktiviert), Threads, Sockets und native OS-APIs. Standard-C++20-Sprachmerkmale und die mitgelieferte Standardbibliothek werden vom echten Compiler verarbeitet; Verfügbarkeit einzelner Bibliotheksfunktionen hängt vom WASI-Build ab. Programmspeicher ist auf 256 MiB begrenzt; Compiler und Linker benötigen zusätzlich Browserspeicher. stdin liest die vor Run eingegebenen UTF-8-Daten; nach deren Ende folgt EOF. Interaktives Tippen während ein synchrones WASI-Programm bereits läuft wird noch nicht unterstützt. Jede Ausführung erstellt eine neue WASI-Instanz.
+Die Flags sind `-std=c++20 -O0 -fno-exceptions -fno-threadsafe-statics -Wall -Wextra -fno-color-diagnostics -I. -Wl,--max-memory=268435456`. Der WASI-/Browser-Build begrenzt Exceptions (hier deaktiviert), Threads, Sockets und native OS-APIs. Standard-C++20-Sprachmerkmale und die mitgelieferte Standardbibliothek werden vom echten Compiler verarbeitet; Verfügbarkeit einzelner Bibliotheksfunktionen hängt vom WASI-Build ab. Programmspeicher ist auf 256 MiB begrenzt; Compiler und Linker benötigen zusätzlich Browserspeicher. stdin liest im Live-Modus den gemeinsamen UTF-8-Kanal bis EOF; im Fallback liest es den vor Run vorbereiteten Text. Jede Ausführung erstellt eine neue WASI-Instanz.
 
 Beim ersten Laden ist mit ungefähr **100 MB Downloads** von den **same-origin GitHub-Pages-Assets** zu rechnen (die aktuell vendorten Clang-/LLD-Wasm-Dateien und Sysroot sind zusammen etwa 92 MiB; Transfer und Caching hängen vom Browser ab). Kein Compiler-Backend und kein Quellcode-Upload. Heruntergeladene Toolchain-Dateien werden innerhalb des Workers wiederverwendet; nach Stop wird der Worker neu erzeugt und der HTTP-Cache kann Downloads vermeiden. C++ hat wegen der großen Assets ein Ladezeitlimit von fünf Minuten.
 
@@ -95,7 +101,7 @@ print(np.array([1, 2, 3]) * 2)
 
 Die Ausgabe ist `[2 4 6]`. Pakete müssen Pyodide-kompatibel sein und werden zur Laufzeit vom CDN geladen; dafür ist eine Internetverbindung nötig. Ein Fehler beim Vorladen von `micropip` wird als Runtime-Ladefehler angezeigt.
 
-Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funktionieren, native Pakete nur mit einem passenden Pyodide-Paket. Server-Frameworks, dauerhafte Hintergrundprozesse und serverseitige Dateisysteme stehen nicht zur Verfügung. `input()` liest die vor Run eingegebenen Zeilen; nach deren Ende folgt `EOFError`. Wie bisher bleibt der Python-Interpreter zwischen Ausführungen erhalten.
+Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funktionieren, native Pakete nur mit einem passenden Pyodide-Paket. Server-Frameworks, dauerhafte Hintergrundprozesse und serverseitige Dateisysteme stehen nicht zur Verfügung. `input()` liest im Live-Modus auch nach Run eingegebene Zeilen; nach EOF folgt `EOFError`. Im Fallback liest es ausschließlich den vor Run vorbereiteten Text. Wie bisher bleibt der Python-Interpreter zwischen Ausführungen erhalten.
 
 ## Ausfallsicherheit
 
@@ -107,13 +113,23 @@ Bei einem CodeMirror-CDN-Fehler oder nach 15 Sekunden Ladezeit bleibt ein einfac
 2. Unter **Settings → Pages** als Quelle **GitHub Actions** auswählen.
 3. Auf `main` pushen oder den Workflow manuell starten.
 
-`.github/workflows/pages.yml` prüft JavaScript und veröffentlicht `index.html`, `styles.css`, `app.js`, `pyodide-worker.js` und `cpp-worker.js` sowie die vollständigen Verzeichnisse `vendor/browsercc` und `vendor/browser-wasi-shim` als statische Seite, einschließlich `clang.wasm`, `lld.wasm`, `sysroot.tar` und aller benötigten JS-Module.
+`.github/workflows/pages.yml` prüft JavaScript und veröffentlicht `index.html`, `styles.css`, `app.js`, `pyodide-worker.js`, `cpp-worker.js`, `live-stdin.js` und `coi-serviceworker.js` sowie die vollständigen Verzeichnisse `vendor/browsercc` und `vendor/browser-wasi-shim` als statische Seite, einschließlich `clang.wasm`, `lld.wasm`, `sysroot.tar` und aller benötigten JS-Module.
 
 Lokale Prüfungen:
 
 ```bash
 node --check --input-type=module < app.js
+node --check live-stdin.js
+node --check coi-serviceworker.js
 node --check pyodide-worker.js
 node --check --input-type=module < cpp-worker.js
 git diff --check
 ```
+
+Browser-Smoke-Test (Playwright mit installiertem Chromium, lokaler Server wie oben):
+
+```bash
+node tests/live-stdin-smoke.cjs
+```
+
+Der Test prüft echte Isolation durch den Service Worker, Eingabe erst nach sichtbarem Prompt für C++ und Python, Unicode, numerische Eingabe, EOF per Tastatur und Button, Stop beim Warten, Worker-Neustart, Ringpuffer-Überlauf und den nicht isolierten Fallback beider Sprachen. Optional setzen `TEST_URL` und `CHROMIUM_PATH` die Serveradresse bzw. Chromium-Binärdatei. Playwright muss über Node auflösbar sein.

@@ -1,3 +1,4 @@
+import "./live-stdin.js";
 const STORAGE_KEY = "py-studio:workspace";
 const LEGACY_KEY = "py-studio:main.py";
 const DEFAULT_CODE = `from datetime import datetime
@@ -20,6 +21,77 @@ const newFileButton = document.querySelector("#new-file-button");
 
 const output = document.querySelector("#terminal-output");
 const stdinInput = document.querySelector("#stdin-input");
+const eofButton = document.querySelector("#stdin-eof");
+const stdinNote = document.querySelector("#stdin-note");
+const liveStdinAvailable = globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined";
+const encoder = new TextEncoder();
+
+function disposeStdin(rt) {
+  rt.input?.channel.abort();
+  clearInterval(rt.input?.timer);
+  rt.input = null;
+}
+
+function flushStdin(input) {
+  while (input.queue.length) {
+    const bytes = input.queue[0];
+    const count = input.channel.write(bytes);
+    if (count < bytes.length) { input.queue[0] = bytes.subarray(count); return; }
+    input.queue.shift();
+  }
+  if (input.closed) input.channel.close();
+}
+
+function appendStdin(input, text, final = false) {
+  // Do not encode a high surrogate until its matching low surrogate arrives.
+  const end = !final && /[\uD800-\uDBFF]$/.test(text) ? text.length - 1 : text.length;
+  if (end > input.sent) input.queue.push(encoder.encode(text.slice(input.sent, end)));
+  input.sent = end;
+  flushStdin(input);
+}
+
+function refreshStdin() {
+  const inputs = Object.values(runtimes).filter(rt => rt.running && rt.input).map(rt => rt.input);
+  eofButton.disabled = !inputs.some(input => !input.closed);
+  stdinInput.readOnly = inputs.length > 0 && inputs.every(input => input.closed);
+  stdinNote.textContent = liveStdinAvailable
+    ? "Live-stdin: Während das Programm wartet hier tippen; Enter sendet einen Zeilenumbruch. EOF (Ctrl/⌘+D) beendet die Eingabe. Bereits gesendeten Text nur ergänzen."
+    : "Vorbereitete stdin (Fallback): Alle Eingaben vor Run eingeben. Änderungen während der Ausführung gelten erst beim nächsten Run; danach folgt automatisch EOF. Live-Eingabe benötigt crossOriginIsolated und SharedArrayBuffer (HTTPS/localhost).";
+  if (inputs.some(input => input.closed)) stdinNote.textContent += " EOF gesendet.";
+  stdinInput.placeholder = liveStdinAvailable ? "Vor Run vorbereiten oder während des Programms tippen; danach EOF." : "Alle Eingaben vor Run eingeben.";
+}
+
+function closeStdin() {
+  for (const rt of Object.values(runtimes)) {
+    const input = rt.input;
+    if (!rt.running || !input || input.closed) continue;
+    appendStdin(input, input.text, true);
+    input.closed = true;
+    flushStdin(input);
+  }
+  refreshStdin();
+}
+
+stdinInput.addEventListener("input", () => {
+  for (const rt of Object.values(runtimes)) {
+    const input = rt.input;
+    if (!rt.running || !input || input.closed) continue;
+    if (!stdinInput.value.startsWith(input.text)) {
+      stdinInput.value = input.text;
+      showToast("Gesendete Eingabe kann nur ergänzt werden.");
+      continue;
+    }
+    input.text = stdinInput.value;
+    appendStdin(input, input.text);
+  }
+});
+stdinInput.addEventListener("keydown", event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault(); closeStdin();
+  }
+});
+eofButton.addEventListener("click", closeStdin);
+
 const statusText = document.querySelector("#status-text");
 const statusIndicator = document.querySelector("#status-indicator");
 const runtimeLabel = document.querySelector("#runtime-label");
@@ -291,6 +363,7 @@ function replaceCode(code) {
 }
 
 function refreshRuntimeStatus() {
+  refreshStdin();
   const language = activeFile().language;
   const rt = runtimes[language];
   runButton.disabled = rt.running || (!rt.ready && !rt.failed);
@@ -301,6 +374,7 @@ function refreshRuntimeStatus() {
 function runtimeFailure(language, message) {
   const rt = runtimes[language];
   clearTimeout(rt.timer);
+  disposeStdin(rt);
   rt.worker?.terminate();
   rt.worker = null;
   rt.ready = false;
@@ -319,6 +393,7 @@ function ensureRuntime(language) {
 function createWorker(language) {
   const rt = runtimes[language];
   clearTimeout(rt.timer);
+  disposeStdin(rt);
   rt.worker?.terminate();
   Object.assign(rt, { ready: false, failed: false, running: false,
     message: languageName[language] + " wird geladen …", state: "loading" });
@@ -340,6 +415,7 @@ function createWorker(language) {
       } else if (data.type === "running") {
         rt.running = true;
       } else if (data.type === "finished" || data.type === "run-error") {
+        disposeStdin(rt);
         rt.running = false;
         rt.message = data.type === "finished" ? (language === "cpp" ? "Clang C++20 · WASI bereit" : languageName[language] + " bereit") : "Fehler in " + rt.filename;
         rt.state = data.type === "finished" ? "ready" : "error";
@@ -380,7 +456,13 @@ function runCode() {
     const extraFiles = Object.fromEntries(Object.entries(workspace.files)
       .filter(([name, file]) => name !== rt.filename && file.language === "cpp")
       .map(([name, file]) => [name, file.content]));
-    rt.worker.postMessage({ type: "run", code: currentCode(), filename: rt.filename, stdin: stdinInput.value,
+    if (liveStdinAvailable) {
+      rt.input = { channel: new LiveStdin(), queue: [], text: stdinInput.value, sent: 0, closed: false };
+      appendStdin(rt.input, rt.input.text);
+      rt.input.timer = setInterval(() => flushStdin(rt.input), 10);
+    }
+    refreshStdin();
+    rt.worker.postMessage({ type: "run", liveStdin: rt.input?.channel.buffer, code: currentCode(), filename: rt.filename, stdin: stdinInput.value,
       ...(language === "cpp" ? { extraFiles } : {}) });
   }
   catch (error) { runtimeFailure(language, error.message); }
