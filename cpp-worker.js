@@ -3,7 +3,11 @@ import { compile, loadToolchain } from "./vendor/browsercc/index.js";
 import { WASI, File, OpenFile, ConsoleStdout, Fd, wasi as defs } from "./vendor/browser-wasi-shim/index.js";
 
 class LiveInputFd extends Fd {
-  constructor(buffer) { super(); this.channel = new LiveStdin(buffer); }
+  constructor(buffer) {
+    super();
+    this.channel = new LiveStdin(buffer);
+    this.channel.onWait = waiting => send("stdin-waiting", { waiting });
+  }
   fd_fdstat_get() {
     const fdstat = new defs.Fdstat(defs.FILETYPE_CHARACTER_DEVICE, 0);
     fdstat.fs_rights_base = BigInt(defs.RIGHTS_FD_READ);

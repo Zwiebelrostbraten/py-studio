@@ -59,6 +59,7 @@ self.addEventListener("message", async ({ data }) => {
     const stdinBytes = new TextEncoder().encode(data.stdin ?? "");
     let stdinOffset = 0;
     const channel = data.liveStdin ? new LiveStdin(data.liveStdin) : null;
+    if (channel) channel.onWait = waiting => send("stdin-waiting", { waiting });
     pyodide.setStdin({
       isatty: false,
       read: buffer => {

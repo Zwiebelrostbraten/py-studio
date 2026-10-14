@@ -23,6 +23,11 @@
     }
     close() { Atomics.store(this.state, EOF, 1); this.wake(); }
     abort() { Atomics.store(this.state, ABORT, 1); this.wake(); }
+    setWaiting(waiting) {
+      if (this.waiting === waiting) return;
+      this.waiting = waiting;
+      this.onWait?.(waiting);
+    }
     read(size) {
       if (!size) return new Uint8Array();
       for (;;) {
@@ -32,12 +37,14 @@
         const write = Atomics.load(this.state, WRITE) >>> 0;
         const count = Math.min(size, (write - read) >>> 0);
         if (count) {
+          this.setWaiting(false);
           const result = new Uint8Array(count);
           for (let i = 0; i < count; i++) result[i] = this.bytes[(read + i) % this.bytes.length];
           Atomics.store(this.state, READ, (read + count) | 0);
           return result;
         }
-        if (Atomics.load(this.state, EOF)) return new Uint8Array();
+        if (Atomics.load(this.state, EOF)) { this.setWaiting(false); return new Uint8Array(); }
+        this.setWaiting(true);
         Atomics.wait(this.state, SEQUENCE, sequence);
       }
     }

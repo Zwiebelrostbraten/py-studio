@@ -23,6 +23,8 @@ const output = document.querySelector("#terminal-output");
 const stdinInput = document.querySelector("#stdin-input");
 const eofButton = document.querySelector("#stdin-eof");
 const stdinNote = document.querySelector("#stdin-note");
+const terminalPanel = document.querySelector(".terminal-panel");
+const stdinMode = document.querySelector("#stdin-mode");
 const liveStdinAvailable = globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined";
 const encoder = new TextEncoder();
 
@@ -30,6 +32,7 @@ function disposeStdin(rt) {
   rt.input?.channel.abort();
   clearInterval(rt.input?.timer);
   rt.input = null;
+  rt.waiting = false;
 }
 
 function flushStdin(input) {
@@ -50,21 +53,37 @@ function appendStdin(input, text, final = false) {
   flushStdin(input);
 }
 
+function openInputs() {
+  return Object.values(runtimes).filter(rt => rt.running && rt.input && !rt.input.closed);
+}
+
+function focusStdin() {
+  stdinInput.focus({ preventScroll: true });
+  stdinInput.setSelectionRange(stdinInput.value.length, stdinInput.value.length);
+}
+
 function refreshStdin() {
   const inputs = Object.values(runtimes).filter(rt => rt.running && rt.input).map(rt => rt.input);
-  eofButton.disabled = !inputs.some(input => !input.closed);
-  stdinInput.readOnly = inputs.length > 0 && inputs.every(input => input.closed);
-  stdinNote.textContent = liveStdinAvailable
-    ? "Live-stdin: Während das Programm wartet hier tippen; Enter sendet einen Zeilenumbruch. EOF (Ctrl/⌘+D) beendet die Eingabe. Bereits gesendeten Text nur ergänzen."
-    : "Vorbereitete stdin (Fallback): Alle Eingaben vor Run eingeben. Änderungen während der Ausführung gelten erst beim nächsten Run; danach folgt automatisch EOF. Live-Eingabe benötigt crossOriginIsolated und SharedArrayBuffer (HTTPS/localhost).";
-  if (inputs.some(input => input.closed)) stdinNote.textContent += " EOF gesendet.";
-  stdinInput.placeholder = liveStdinAvailable ? "Vor Run vorbereiten oder während des Programms tippen; danach EOF." : "Alle Eingaben vor Run eingeben.";
+  const live = inputs.some(input => !input.closed);
+  const closed = inputs.length > 0 && !live;
+  eofButton.disabled = !live;
+  stdinInput.readOnly = closed;
+  const mode = live ? "LIVE · Eingabe aktiv" : closed ? "EOF · Eingabe beendet" : liveStdinAvailable ? "LIVE · bereit" : "PREFILL · Fallback";
+  if (stdinMode.textContent !== mode) stdinMode.textContent = mode;
+  stdinInput.closest(".stdin-control").classList.toggle("is-live", live);
+  stdinNote.textContent = live
+    ? "Hier tippen → laufendes Programm. Enter sendet die Zeile; EOF oder Ctrl/⌘+D beendet stdin."
+    : closed ? "EOF gesendet. Gepufferte Eingabe wird noch gelesen."
+    : liveStdinAvailable ? "Mehrere Zeilen vor Run vorbereiten oder nach Run direkt im Terminal tippen."
+    : "Vorbereitete stdin (Fallback): Alle Eingaben vor Run eingeben; danach automatisch EOF. Live-Eingabe benötigt crossOriginIsolated und SharedArrayBuffer auf HTTPS/localhost mit erlaubtem Service Worker.";
+  stdinInput.placeholder = live ? "Eingabe für das laufende Programm …" : "Alle Eingaben vor Run eingeben (mehrere Zeilen möglich).";
 }
 
 function closeStdin() {
   for (const rt of Object.values(runtimes)) {
     const input = rt.input;
     if (!rt.running || !input || input.closed) continue;
+    input.text = stdinInput.value;
     appendStdin(input, input.text, true);
     input.closed = true;
     flushStdin(input);
@@ -72,7 +91,8 @@ function closeStdin() {
   refreshStdin();
 }
 
-stdinInput.addEventListener("input", () => {
+stdinInput.addEventListener("input", event => {
+  if (event.isComposing) return;
   for (const rt of Object.values(runtimes)) {
     const input = rt.input;
     if (!rt.running || !input || input.closed) continue;
@@ -81,16 +101,85 @@ stdinInput.addEventListener("input", () => {
       showToast("Gesendete Eingabe kann nur ergänzt werden.");
       continue;
     }
-    input.text = stdinInput.value;
-    appendStdin(input, input.text);
+    // Only complete lines are submitted. The draft remains editable with native
+    // textarea navigation, Backspace, selection, paste and IME composition.
+    if (stdinInput.matches(":read-only")) continue;
+    const end = stdinInput.value.lastIndexOf("\n") + 1;
+    if (end > input.text.length) {
+      input.text = stdinInput.value.slice(0, end);
+      appendStdin(input, input.text);
+    }
+  }
+});
+stdinInput.addEventListener("compositionend", () => stdinInput.dispatchEvent(new Event("input", { bubbles: true })));
+stdinInput.addEventListener("beforeinput", event => {
+  if (!openInputs().length) return;
+  const boundary = Math.max(0, ...openInputs().map(rt => rt.input.text.length));
+  if (stdinInput.selectionStart < boundary ||
+      (event.inputType === "deleteContentBackward" && stdinInput.selectionStart === boundary && stdinInput.selectionEnd === boundary)) {
+    event.preventDefault();
+    focusStdin();
+    showToast("Gesendete Zeilen können nur ergänzt werden.");
   }
 });
 stdinInput.addEventListener("keydown", event => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+  if (openInputs().length && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
     event.preventDefault(); closeStdin();
   }
 });
 eofButton.addEventListener("click", closeStdin);
+
+function terminalWaiting() {
+  return openInputs().some(rt => rt.waiting);
+}
+terminalPanel.addEventListener("click", event => {
+  if (terminalWaiting() && !event.target.closest("textarea, input, button, a, [contenteditable]")) focusStdin();
+});
+terminalPanel.addEventListener("keydown", event => {
+  // Only the terminal background/output owns this routing. Editors, controls,
+  // shortcuts and idle terminals retain their normal browser behavior.
+  const altGraph = event.getModifierState("AltGraph");
+  if (!terminalWaiting() || ![terminalPanel, output].includes(event.target) || (event.altKey && !altGraph) || event.isComposing) return;
+  const eof = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d";
+  if ((event.ctrlKey || event.metaKey) && !altGraph && !eof) return;
+  if (!eof && Array.from(event.key).length !== 1 && !["Enter", "Backspace", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  // Keep the textarea's selection when focus is moved by keyboard.
+  stdinInput.focus({ preventScroll: true });
+  if (eof) { closeStdin(); return; }
+  let start = stdinInput.selectionStart, end = stdinInput.selectionEnd;
+  const boundary = Math.max(0, ...openInputs().map(rt => rt.input.text.length));
+  if (event.key.startsWith("Arrow")) {
+    const value = stdinInput.value;
+    let next = start;
+    if (event.key === "ArrowLeft") next = Math.max(0, start - (end === start ? 1 : 0));
+    if (event.key === "ArrowRight") next = Math.min(value.length, end + (end === start ? 1 : 0));
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const column = start - lineStart;
+      const previousStart = value.lastIndexOf("\n", lineStart - 2) + 1;
+      const lineEnd = value.indexOf("\n", start);
+      const nextEnd = value.indexOf("\n", lineEnd + 1);
+      next = event.key === "ArrowUp" ? (lineStart ? Math.min(previousStart + column, lineStart - 1) : 0)
+        : (lineEnd < 0 ? value.length : Math.min(lineEnd + 1 + column, nextEnd < 0 ? value.length : nextEnd));
+    }
+    stdinInput.setSelectionRange(event.shiftKey ? start : next, next);
+    return;
+  }
+  if (event.key === "Backspace") {
+    if (start === end) {
+      const last = Array.from(stdinInput.value.slice(boundary, start)).at(-1);
+      start = Math.max(boundary, start - (last?.length || 0));
+    }
+    if (start < boundary || end <= boundary) return;
+    stdinInput.setRangeText("", start, end, "end");
+  } else {
+    if (start < boundary) start = end = stdinInput.value.length;
+    stdinInput.setRangeText(event.key === "Enter" ? "\n" : event.key, start, end, "end");
+  }
+  // One edit, one input event; the shared queue deduplicates by sent offset.
+  stdinInput.dispatchEvent(new Event("input", { bubbles: true }));
+});
 
 const statusText = document.querySelector("#status-text");
 const statusIndicator = document.querySelector("#status-indicator");
@@ -412,6 +501,8 @@ function createWorker(language) {
         rt.message = data.message; rt.state = rt.running ? "running" : "loading";
       } else if (data.type === "stdout" || data.type === "stderr") {
         appendOutput(data.text || "", data.type === "stderr" ? "error" : "");
+      } else if (data.type === "stdin-waiting") {
+        rt.waiting = data.waiting;
       } else if (data.type === "running") {
         rt.running = true;
       } else if (data.type === "finished" || data.type === "run-error") {
@@ -462,6 +553,7 @@ function runCode() {
       rt.input.timer = setInterval(() => flushStdin(rt.input), 10);
     }
     refreshStdin();
+    if (rt.input) focusStdin();
     rt.worker.postMessage({ type: "run", liveStdin: rt.input?.channel.buffer, code: currentCode(), filename: rt.filename, stdin: stdinInput.value,
       ...(language === "cpp" ? { extraFiles } : {}) });
   }

@@ -72,7 +72,7 @@
             <noscript><p class="noscript-message">JavaScript muss aktiviert sein, damit der Editor funktioniert.</p></noscript>
           </section>
 
-          <section class="terminal-panel" aria-label="Terminal">
+          <section class="terminal-panel" aria-label="Terminal" tabindex="0">
             <div class="terminal-header">
               <div class="terminal-tabs"><span class="terminal-tab is-active">TERMINAL</span></div>
               <div class="terminal-actions">
@@ -82,13 +82,17 @@
               </div>
             </div>
             <p id="cpp-note" class="cpp-note" hidden>Echter Clang C++20 → WASI-WebAssembly. Erster Download ca. 100 MB von dieser GitHub-Pages-Seite. WASI/Browser begrenzen Exceptions, Threads, Sockets und native OS-APIs.</p>
-            <div class="stdin-control">
-              <div class="stdin-heading"><label for="stdin-input">stdin (Eingabe)</label>
-              <button class="stop-button" id="stdin-eof" type="button" disabled title="Eingabe beenden (Ctrl/⌘+D im Eingabefeld)">EOF</button></div>
-              <textarea id="stdin-input" rows="3" aria-describedby="stdin-note" placeholder="Eine Eingabe pro Zeile; alle Eingaben vor Run eingeben." spellcheck="false"></textarea>
-              <p id="stdin-note">stdin-Modus wird geprüft. Im Fallback alle Eingaben vor Run eingeben; Live-stdin erlaubt Tippen während das Programm wartet und EOF zum Beenden.</p>
-            </div>
             <pre class="terminal-output" id="terminal-output" tabindex="0" aria-live="polite"><span class="terminal-placeholder">Starte dein Programm mit <strong>Run</strong> oder Ctrl/⌘↵</span></pre>
+            <div class="stdin-control">
+              <div class="stdin-heading"><label for="stdin-input">Terminal-Eingabe</label>
+                <span id="stdin-mode" class="stdin-mode" role="status" aria-live="polite" aria-atomic="true">Modus wird geprüft</span>
+                <button class="stop-button" id="stdin-eof" type="button" disabled title="Eingabe beenden (Ctrl/⌘+D im Terminal)">EOF</button>
+              </div>
+              <div class="stdin-line"><span class="stdin-prompt" aria-hidden="true">›</span>
+                <textarea id="stdin-input" rows="2" aria-describedby="stdin-note" aria-label="Terminal-Eingabe für das Programm" placeholder="Alle Eingaben vor Run eingeben." spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+              </div>
+              <p id="stdin-note">stdin-Modus wird geprüft.</p>
+            </div>
           </section>
         </main>
       </div>
