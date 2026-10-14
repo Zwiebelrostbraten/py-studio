@@ -80,7 +80,12 @@
                 <button class="stop-button" id="stop-button" type="button" disabled>Stop</button>
               </div>
             </div>
-            <p id="cpp-note" class="cpp-note" hidden>Echter Clang C++20 → WASI-WebAssembly. Erster Download ca. 100 MB von dieser GitHub-Pages-Seite. WASI/Browser begrenzen Exceptions, Threads, Sockets und native OS-APIs.</p>
+            <p id="cpp-note" class="cpp-note" hidden>Echter Clang C++20 → WASI-WebAssembly. Erster Download ca. 100 MB von dieser GitHub-Pages-Seite. WASI/Browser begrenzen Exceptions, Threads, Sockets und native OS-APIs. Interaktives Tippen während ein synchrones WASI-Programm läuft wird noch nicht unterstützt.</p>
+            <div class="stdin-control">
+              <label for="stdin-input">stdin (Eingabe)</label>
+              <textarea id="stdin-input" rows="3" aria-describedby="stdin-note" placeholder="Eine Eingabe pro Zeile; alle Eingaben vor Run eingeben." spellcheck="false"></textarea>
+              <p id="stdin-note">Alle Eingaben vor Run eingeben, z. B. Anna und 42 in zwei Zeilen. Kein interaktives Tippen im laufenden Programm; Änderungen gelten erst beim nächsten Run.</p>
+            </div>
             <pre class="terminal-output" id="terminal-output" tabindex="0" aria-live="polite"><span class="terminal-placeholder">Starte dein Programm mit <strong>Run</strong> oder Ctrl/⌘↵</span></pre>
           </section>
         </main>

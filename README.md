@@ -26,11 +26,47 @@ Run kompiliert bzw. führt die aktive Datei aus. Andere gespeicherte C++-Dateien
 
 **Run** oder **Ctrl/⌘+Enter** führt die aktive Datei mit der passenden Sprache aus. Ausgabe und Interpreterfehler erscheinen im Terminal; Befehlszeile, Runtime-Status und Fehlermeldungen nennen Sprache bzw. Datei. **Stop** beendet laufende Worker auch bei Endlosschleifen und erzeugt sie neu. Wenn beide Sprachen gleichzeitig laufen, stoppt Stop beide. Python-Variablen und das virtuelle Dateisystem gehen beim Neustart verloren. **Clear** leert nur das Terminal. **Zurücksetzen** ersetzt nur den Inhalt der aktiven Datei durch das Beispiel ihrer Sprache. **Download** speichert die aktive Datei unter ihrem Dateinamen.
 
+### Vorbereitete Eingabe (stdin)
+
+Im Terminal steht das mehrzeilige Feld **stdin (Eingabe)** für beide Sprachen bereit. Alle Eingaben **vor Run** eingeben, eine Eingabe pro Zeile, zum Beispiel:
+
+```text
+Anna
+42
+```
+
+Jeder Run erhält den aktuellen Feldinhalt von Anfang an. Leere Zeilen und Unicode bleiben erhalten; eine letzte Zeile benötigt keinen abschließenden Zeilenumbruch. Ein leeres Feld liefert sofort EOF. Änderungen während einer Ausführung gelten erst beim nächsten Run. Das Feld bleibt bei Clear erhalten, wird aber nicht in localStorage gespeichert und ist nach Neuladen leer. Dies ist vorbereitete Eingabe, kein Live-Terminal; interaktives Tippen während ein synchrones WASI-Programm bereits läuft wird noch nicht unterstützt.
+
+C++ mit `getline` und numerischem `cin` (mit obiger Eingabe: `Hallo Anna, Zahl: 42`):
+
+```cpp
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string eingabe;
+    int zahl;
+    if (!std::getline(std::cin, eingabe) || !(std::cin >> zahl)) {
+        std::cerr << "Bitte Name und Zahl vor Run eingeben.\n";
+        return 1;
+    }
+    std::cout << "Hallo " << eingabe << ", Zahl: " << zahl << '\n';
+}
+```
+
+Python mit denselben Eingaben:
+
+```python
+name = input("Name: ")
+zahl = int(input("Zahl: "))
+print(f"Hallo {name}, Zahl: {zahl}")
+```
+
 ### C++
 
 `cpp-worker.js` importiert `compile` aus `vendor/browsercc/index.js` und die WASI-Laufzeit aus `vendor/browser-wasi-shim/index.js`. Echter Clang kompiliert C++20, LLD linkt gegen die vendorte WASI-Sysroot mit libc++, anschließend führt WebAssembly mit `@bjorn3/browser_wasi_shim` das Programm aus. Dies ist ein echter Compiler, kein Interpreter für eine Grammatik-Teilmenge. stdout, stderr, Compiler-/Linkerdiagnosen und Exit-Code erscheinen im Terminal; Statusmeldungen zeigen Laden, Kompilieren, Linken und Ausführen.
 
-Die Flags sind `-std=c++20 -O0 -fno-exceptions -fno-threadsafe-statics -Wall -Wextra -fno-color-diagnostics -I. -Wl,--max-memory=268435456`. Der WASI-/Browser-Build begrenzt Exceptions (hier deaktiviert), Threads, Sockets und native OS-APIs. Standard-C++20-Sprachmerkmale und die mitgelieferte Standardbibliothek werden vom echten Compiler verarbeitet; Verfügbarkeit einzelner Bibliotheksfunktionen hängt vom WASI-Build ab. Programmspeicher ist auf 256 MiB begrenzt; Compiler und Linker benötigen zusätzlich Browserspeicher. stdin erhält EOF; interaktive Eingaben werden nicht unterstützt. Jede Ausführung erstellt eine neue WASI-Instanz.
+Die Flags sind `-std=c++20 -O0 -fno-exceptions -fno-threadsafe-statics -Wall -Wextra -fno-color-diagnostics -I. -Wl,--max-memory=268435456`. Der WASI-/Browser-Build begrenzt Exceptions (hier deaktiviert), Threads, Sockets und native OS-APIs. Standard-C++20-Sprachmerkmale und die mitgelieferte Standardbibliothek werden vom echten Compiler verarbeitet; Verfügbarkeit einzelner Bibliotheksfunktionen hängt vom WASI-Build ab. Programmspeicher ist auf 256 MiB begrenzt; Compiler und Linker benötigen zusätzlich Browserspeicher. stdin liest die vor Run eingegebenen UTF-8-Daten; nach deren Ende folgt EOF. Interaktives Tippen während ein synchrones WASI-Programm bereits läuft wird noch nicht unterstützt. Jede Ausführung erstellt eine neue WASI-Instanz.
 
 Beim ersten Laden ist mit ungefähr **100 MB Downloads** von den **same-origin GitHub-Pages-Assets** zu rechnen (die aktuell vendorten Clang-/LLD-Wasm-Dateien und Sysroot sind zusammen etwa 92 MiB; Transfer und Caching hängen vom Browser ab). Kein Compiler-Backend und kein Quellcode-Upload. Heruntergeladene Toolchain-Dateien werden innerhalb des Workers wiederverwendet; nach Stop wird der Worker neu erzeugt und der HTTP-Cache kann Downloads vermeiden. C++ hat wegen der großen Assets ein Ladezeitlimit von fünf Minuten.
 
@@ -59,7 +95,7 @@ print(np.array([1, 2, 3]) * 2)
 
 Die Ausgabe ist `[2 4 6]`. Pakete müssen Pyodide-kompatibel sein und werden zur Laufzeit vom CDN geladen; dafür ist eine Internetverbindung nötig. Ein Fehler beim Vorladen von `micropip` wird als Runtime-Ladefehler angezeigt.
 
-Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funktionieren, native Pakete nur mit einem passenden Pyodide-Paket. Server-Frameworks, dauerhafte Hintergrundprozesse und serverseitige Dateisysteme stehen nicht zur Verfügung. `input()` erhält EOF. Wie bisher bleibt der Python-Interpreter zwischen Ausführungen erhalten.
+Pyodide ist ein CPython-Build für WebAssembly. Viele reine Python-Pakete funktionieren, native Pakete nur mit einem passenden Pyodide-Paket. Server-Frameworks, dauerhafte Hintergrundprozesse und serverseitige Dateisysteme stehen nicht zur Verfügung. `input()` liest die vor Run eingegebenen Zeilen; nach deren Ende folgt `EOFError`. Wie bisher bleibt der Python-Interpreter zwischen Ausführungen erhalten.
 
 ## Ausfallsicherheit
 

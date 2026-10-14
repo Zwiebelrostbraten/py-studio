@@ -28,7 +28,6 @@ async function initialize() {
       }
       pyodide.setStdout(stream("stdout"));
       pyodide.setStderr(stream("stderr"));
-      pyodide.setStdin({ stdin: () => null });
       initialized = true;
       send("ready", { version: pyodide.runPython("import sys; sys.version.split()[0]") });
     } catch (error) {
@@ -54,6 +53,14 @@ self.addEventListener("message", async ({ data }) => {
   running = true;
   send("running");
   try {
+    // Reset for every run, including after EOF or a run that left unread input.
+    // Byte input preserves Unicode, blank lines and an unterminated final line.
+    const stdinBytes = new TextEncoder().encode(data.stdin ?? "");
+    let stdinOffset = 0;
+    pyodide.setStdin({
+      isatty: false,
+      stdin: () => stdinOffset < stdinBytes.length ? stdinBytes[stdinOffset++] : null,
+    });
     try {
       await pyodide.runPythonAsync(data.code ?? "");
     } finally {

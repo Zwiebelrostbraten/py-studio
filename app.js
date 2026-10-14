@@ -19,6 +19,7 @@ const downloadButton = document.querySelector("#download-button");
 const newFileButton = document.querySelector("#new-file-button");
 
 const output = document.querySelector("#terminal-output");
+const stdinInput = document.querySelector("#stdin-input");
 const statusText = document.querySelector("#status-text");
 const statusIndicator = document.querySelector("#status-indicator");
 const runtimeLabel = document.querySelector("#runtime-label");
@@ -379,7 +380,7 @@ function runCode() {
     const extraFiles = Object.fromEntries(Object.entries(workspace.files)
       .filter(([name, file]) => name !== rt.filename && file.language === "cpp")
       .map(([name, file]) => [name, file.content]));
-    rt.worker.postMessage({ type: "run", code: currentCode(), filename: rt.filename,
+    rt.worker.postMessage({ type: "run", code: currentCode(), filename: rt.filename, stdin: stdinInput.value,
       ...(language === "cpp" ? { extraFiles } : {}) });
   }
   catch (error) { runtimeFailure(language, error.message); }

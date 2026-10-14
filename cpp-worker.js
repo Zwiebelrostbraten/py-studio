@@ -51,7 +51,7 @@ self.addEventListener("message", async ({ data }) => {
       send("run-error", { message: "Kompilieren/Linken fehlgeschlagen (Exit " + result.exitCode + ").", exitCode: result.exitCode });
       return;
     }
-    const wasi = new WASI([fileName], [], [new OpenFile(new File(new Uint8Array())), stream("stdout"), stream("stderr")]);
+    const wasi = new WASI([fileName], [], [new OpenFile(new File(new TextEncoder().encode(data.stdin ?? ""))), stream("stdout"), stream("stderr")]);
     const instance = await WebAssembly.instantiate(result.module, { wasi_snapshot_preview1: wasi.wasiImport });
     status("running");
     send("running");
